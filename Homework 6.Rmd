@@ -1,0 +1,133 @@
+---
+title: "HW6_Q1"
+author: "Ethan M. Lotz"
+date: "December 3, 2017"
+output: html_document
+---
+## Homework 6
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ALL)
+library(limma)
+library(DT)
+library("hgu95av2.db")
+library(plyr)
+library(perm)
+library(stats)
+library(DT)
+```
+
+Identify differentially expressed genes as shown:
+
+```{r}
+data(ALL) # Load actual dataset
+pd <- pData(ALL)
+# limma disallows special characters in factor names
+# Convenient wrapper to make names compatible with R internals
+mol.biol <- make.names(pd$mol.biol)
+groups <- factor(mol.biol, levels = unique(mol.biol))
+design <- model.matrix(~0 + groups) # Multifactorial design matrix
+colnames(design) <- levels(groups)
+datatable(design) # Check your work
+# Define what to compare with what
+contrast <- makeContrasts(BCR.ABLvsNEG = BCR.ABL-NEG, levels=design)
+# Normalize gene expression matrix before differential expression
+M <- normalizeQuantiles(exprs(ALL))
+fit <- lmFit(M, design)
+fit.c <- contrasts.fit(fit, contrast)
+fit.c <- eBayes(fit.c)
+# All results of differential expression analysis
+tt <- topTable(fit.c, number=Inf, coef = "BCR.ABLvsNEG", adjust.method = "fdr", p.value = 0.05)
+
+#Added ID column to tt
+tt$ID<-rownames(tt)
+```
+
+1. Write a function that takes a vector of significantly differentially expressed probes and annotate them
+by chromosomes they are located on. To do this, you might find the “get” function useful. For
+example: get(paste("hgu95av2", "CHRLOC", sep="")) returns the CHRLOC map for the hgu95av2
+annotation package, assuming it has been loaded already by library().
+
+```{r}
+ChromeAnnot <- function(x){
+  chromes <- as.list(hgu95av2CHR[mappedkeys(hgu95av2CHR)])
+  chromes <- ldply (chromes, data.frame)
+  colnames(chromes) <- c("ID", "Location")
+  ttAnnot <- merge(x, chromes, by="ID", all.x=TRUE) 
+}
+
+ttAnnot <- ChromeAnnot(tt)
+head(ttAnnot)
+```
+
+2. Use Fisher’s Exact test to test whether any chromosomes are significantly enriched or depleted for
+differentially expressed genes.
+
+```{r}
+tt.sig <- topTable(fit.c, number=Inf, coef = "BCR.ABLvsNEG", adjust.method = "fdr", p.value = 0.05)
+
+tt.all <- topTable(fit.c, number=Inf, coef = "BCR.ABLvsNEG", adjust.method = "fdr")
+tt.sig$ID<-rownames(tt)
+tt.all$ID<-rownames(tt.all)
+
+ttAnnot.sig <- ChromeAnnot(tt.sig)
+ttAnnot.all <- ChromeAnnot(tt.all)
+ttAnnot.sig <- ttAnnot.sig[!is.na(ttAnnot.sig$Location),]
+ttAnnot.all <- ttAnnot.all[!is.na(ttAnnot.all$Location),]
+
+count <- c(seq(1:22),"X", "Y")
+
+#I can't figure out how to make the contingency table work correctly so the rest of the homework doesn't work unfortunately.
+
+#result <- lapply(count, function(p) {
+#  m <- table(as.numeric(ttAnnot.all$Location==p), as.numeric(ttAnnot.sig$Location==p))
+#  p.value <- fisher.test(m)$p.value
+#  data.frame(Location=count, p.value=p.value)})
+
+#result <- as.data.frame(do.call(rbind, result))
+#result <- result[order(result$p.value),]
+```
+
+3. Correct for Fisher’s exact p-values for multiple testing using all methods you know.
+
+```{r}
+#Assuming Question 2 was completed:
+
+#result$p.value.BH <- p.adjust(result$p.value, method="BH")
+#result$p.value.BY <- p.adjust(result$p.value, method="BY")
+#result$p.value.bonferroni <- p.adjust(result$p.value, method="bonferroni")
+#result$p.value.holm <- p.adjust(result$p.value, method="holm")
+#result$p.value.holm <- p.adjust(result$p.value, method="FDR")
+
+```
+
+4. Repeat the same calculations using hypergeometric test, binomial test, permutation test.
+
+```{r}
+#Assuming Question 2 was completed the basic frame for this question would be:
+
+#Hypergeometric.test <- phyper(...)$p.value
+#Binomial.test <- binom.test(...)$p.value
+#Permutation.test <- permTS(...)$p.value
+```
+
+5. Summarize the results in one table. Rows are chromosomes, columns are p-values. Column names
+should similar to “Fisher’s exact p-value”, “Fisher’s exact Bonferroni adjusted”, “Fisher’s exact FDR
+adjusted”, “. . . ”, “hypergeometric p-value”, “binomial p-value”, “permutation p-value”.
+
+```{r}
+#Assuming Question 2 was completed the basic frame for this question would be:
+
+#colnames(...)<- c("Fisher Exact", "Fisher's Exact Bonferroni Adjusted","Fisher’s exact FDR adjusted", "Fisher Exact Holm adjusted", #"Fisher Exact BH Adjusted", "Fisher Exact BY Adjusted", "Hypergeometric Test", "Binomial Test", "Permutation Test")
+#datatable(...)
+
+```
+
+6. Interpret the differences in raw p-values from different tests.
+
+I would assume that p-values between certain tests would be similar. For instance, the Fisher's exact test, permutation test, and binomial test all assess similar hypotheses. Small differences among other p-values could also be due to whether or not certain tests use replacement vs. those that do not use replacement. 
+
+7. Interpret the differences among different methods for adjustment for multiple testing.
+
+I would assume each method gives a fairly similar p-value and each method would agree on which chromosomes are significant. There may be 1 or 2 differences depending on how close certain p-values were to 0.05. Each method controls the family-wise error rate (Bonferroni/Holm) or the false discovery rate (BY/HY).
